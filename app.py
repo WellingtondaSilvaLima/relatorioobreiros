@@ -6,7 +6,13 @@ from email.message import EmailMessage
 
 import streamlit as st
 from dotenv import load_dotenv
-from fpdf import FPDF
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from io import BytesIO
 
 # =========================
 # CONFIGURAÇÕES INICIAIS
@@ -81,28 +87,59 @@ def sanitize_filename(name: str) -> str:
     return name or "formulario"
 
 
-class PDFWithUTF8(FPDF):
-    def __init__(self):
-        super().__init__()
-        # Adiciona suporte a Unicode
-        self.set_font("helvetica", size=11)
-
-
 def build_pdf_bytes(form_data: dict) -> bytes:
-    pdf = PDFWithUTF8()
-    pdf.add_page()
-    pdf.set_font("helvetica", size=11)
+    buffer = BytesIO()
+    
+    # Configuração do documento
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=2*cm,
+        leftMargin=2*cm,
+        topMargin=2*cm,
+        bottomMargin=2*cm
+    )
+    
+    # Estilos
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        alignment=TA_CENTER,
+        spaceAfter=20
+    )
+    
+    label_style = ParagraphStyle(
+        'Label',
+        parent=styles['Normal'],
+        fontSize=12,
+        fontName='Helvetica-Bold',
+        spaceBefore=10,
+        spaceAfter=2
+    )
+    
+    text_style = ParagraphStyle(
+        'Text',
+        parent=styles['Normal'],
+        fontSize=11,
+        fontName='Helvetica',
+        spaceAfter=10
+    )
+    
+    # Conteúdo
+    story = []
     
     # Título
-    pdf.set_font("helvetica", style="B", size=16)
-    pdf.multi_cell(0, 10, "Formulário Pastoral")
-    pdf.ln(2)
-
-    # Data de geração
-    pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 8, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True)
-    pdf.ln(4)
-
+    story.append(Paragraph("Formulário Pastoral", title_style))
+    
+    # Data
+    data_text = f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    story.append(Paragraph(data_text, styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Campos
     fields = [
         ("Nome", form_data["nome"]),
         ("Como está sua vida devocional?", form_data["vida_devocional"]),
@@ -114,28 +151,29 @@ def build_pdf_bytes(form_data: dict) -> bytes:
         ("Quais desafios ou dificuldades você tem enfrentado?", form_data["desafios"]),
         ("Quais pedidos de oração você tem?", form_data["pedidos_oracao"]),
     ]
-
+    
     for label, value in fields:
-        # Título do campo em negrito
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.multi_cell(0, 8, label)
+        # Título do campo
+        story.append(Paragraph(label, label_style))
         
-        # Conteúdo do campo
-        pdf.set_font("Helvetica", "", 11)
+        # Conteúdo
         text_value = value if value and value.strip() else "Não informado"
+        # Escapa caracteres especiais para o ReportLab
+        text_value = text_value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        # Substitui quebras de linha por tags <br/>
+        text_value = text_value.replace('\n', '<br/>')
         
-        # Quebra o texto em linhas para garantir que não ultrapasse a largura
-        lines = text_value.split('\n')
-        for line in lines:
-            if line.strip():
-                # Usa multi_cell para garantir quebra automática de linha
-                pdf.multi_cell(0, 7, line.strip())
-            else:
-                pdf.multi_cell(0, 7, " ")
-        
-        pdf.ln(2)  # Espaço entre campos
-
-    return bytes(pdf.output(dest="S"))
+        story.append(Paragraph(text_value, text_style))
+        story.append(Spacer(1, 5))
+    
+    # Gera o PDF
+    doc.build(story)
+    
+    # Retorna os bytes
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    
+    return pdf_bytes
 
 
 def send_email_with_pdf(pdf_bytes: bytes, recipient_email: str, file_name: str, logged_user_name: str):
