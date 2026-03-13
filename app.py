@@ -82,18 +82,23 @@ def sanitize_filename(name: str) -> str:
 
 
 class PDFWithUTF8(FPDF):
-    pass
+    def __init__(self):
+        super().__init__()
+        # Adiciona suporte a Unicode
+        self.set_font("helvetica", size=11)
 
 
 def build_pdf_bytes(form_data: dict) -> bytes:
     pdf = PDFWithUTF8()
-    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-
-    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_font("helvetica", size=11)
+    
+    # Título
+    pdf.set_font("helvetica", style="B", size=16)
     pdf.multi_cell(0, 10, "Formulário Pastoral")
     pdf.ln(2)
 
+    # Data de geração
     pdf.set_font("Helvetica", "", 11)
     pdf.cell(0, 8, f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True)
     pdf.ln(4)
@@ -111,11 +116,24 @@ def build_pdf_bytes(form_data: dict) -> bytes:
     ]
 
     for label, value in fields:
+        # Título do campo em negrito
         pdf.set_font("Helvetica", "B", 12)
         pdf.multi_cell(0, 8, label)
+        
+        # Conteúdo do campo
         pdf.set_font("Helvetica", "", 11)
-        pdf.multi_cell(0, 7, value if value else "Não informado")
-        pdf.ln(2)
+        text_value = value if value and value.strip() else "Não informado"
+        
+        # Quebra o texto em linhas para garantir que não ultrapasse a largura
+        lines = text_value.split('\n')
+        for line in lines:
+            if line.strip():
+                # Usa multi_cell para garantir quebra automática de linha
+                pdf.multi_cell(0, 7, line.strip())
+            else:
+                pdf.multi_cell(0, 7, " ")
+        
+        pdf.ln(2)  # Espaço entre campos
 
     return bytes(pdf.output(dest="S"))
 
