@@ -33,6 +33,8 @@ SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 ALLOWED_USERS_RAW = os.getenv("ALLOWED_USERS", "")
 
+st.markdown(f'<p>{SMTP_PASSWORD}</p>')
+
 
 def parse_allowed_users(raw: str) -> dict:
     """
