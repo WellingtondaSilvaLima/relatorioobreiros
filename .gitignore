@@ -1,0 +1,15 @@
+# Ambiente virtual
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+
+# Segredos
+.env
+.streamlit/secrets.toml
+
+# Sistema
+.DS_Store
+Thumbs.db
