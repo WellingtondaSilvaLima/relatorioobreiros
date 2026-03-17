@@ -7,31 +7,26 @@ from email.message import EmailMessage
 import streamlit as st
 from dotenv import load_dotenv
 from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib.enums import TA_CENTER
 from io import BytesIO
 
-# =========================
-# CONFIGURAÇÕES INICIAIS
-# =========================
 load_dotenv()
 
-st.set_page_config(
-    page_title="Formulário Pastoral",
-    page_icon="assets/logo_igreja.png",
-    layout="centered"
-)
+def get_secret(key: str, default=""):
+    # Prioriza st.secrets no deploy
+    if key in st.secrets:
+        return str(st.secrets[key]).strip()
+    return os.getenv(key, default).strip()
 
-LOGO_PATH = "assets/logo_igreja.png"
-PASTOR_EMAIL = os.getenv("PASTOR_EMAIL", "")
-SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-ALLOWED_USERS_RAW = os.getenv("ALLOWED_USERS", "")
+PASTOR_EMAIL = get_secret("PASTOR_EMAIL")
+SMTP_EMAIL = get_secret("SMTP_EMAIL")
+SMTP_PASSWORD = get_secret("SMTP_PASSWORD").replace(" ", "")
+SMTP_SERVER = get_secret("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(get_secret("SMTP_PORT", "587"))
+ALLOWED_USERS_RAW = get_secret("ALLOWED_USERS")
 
 
 def parse_allowed_users(raw: str) -> dict:
@@ -177,8 +172,12 @@ def build_pdf_bytes(form_data: dict) -> bytes:
 
 
 def send_email_with_pdf(pdf_bytes: bytes, recipient_email: str, file_name: str, logged_user_name: str):
-    if not SMTP_EMAIL or not SMTP_PASSWORD or not recipient_email:
-        raise ValueError("Credenciais de e-mail ou destinatário não configurados.")
+    if not SMTP_EMAIL:
+        raise ValueError("SMTP_EMAIL não configurado.")
+    if not SMTP_PASSWORD:
+        raise ValueError("SMTP_PASSWORD não configurado.")
+    if not recipient_email:
+        raise ValueError("PASTOR_EMAIL não configurado.")
 
     msg = EmailMessage()
     msg["Subject"] = f"Formulário Pastoral - {logged_user_name}"
@@ -196,8 +195,10 @@ def send_email_with_pdf(pdf_bytes: bytes, recipient_email: str, file_name: str, 
         filename=file_name
     )
 
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+        server.ehlo()
         server.starttls()
+        server.ehlo()
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
         server.send_message(msg)
 
