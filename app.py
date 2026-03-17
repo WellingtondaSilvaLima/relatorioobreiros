@@ -29,15 +29,6 @@ SMTP_SERVER = get_secret("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(get_secret("SMTP_PORT", "587"))
 ALLOWED_USERS_RAW = get_secret("ALLOWED_USERS")
 
-with st.sidebar:
-    st.write("SMTP_EMAIL:", SMTP_EMAIL if SMTP_EMAIL else "VAZIO")
-    st.write("PASTOR_EMAIL:", PASTOR_EMAIL if PASTOR_EMAIL else "VAZIO")
-    st.write("SMTP_SERVER:", SMTP_SERVER)
-    st.write("SMTP_PORT:", SMTP_PORT)
-    st.write("Tem senha SMTP?", bool(SMTP_PASSWORD))
-    if SMTP_PASSWORD:
-        st.write("Tamanho da senha SMTP:", len(SMTP_PASSWORD))
-
 
 def parse_allowed_users(raw: str) -> dict:
     """
