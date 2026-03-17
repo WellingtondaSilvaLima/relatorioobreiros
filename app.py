@@ -21,6 +21,7 @@ def get_secret(key: str, default=""):
         return str(st.secrets[key]).strip()
     return os.getenv(key, default).strip()
 
+LOGO_PATH = "assets/logo_igreja.png"
 PASTOR_EMAIL = get_secret("PASTOR_EMAIL")
 SMTP_EMAIL = get_secret("SMTP_EMAIL")
 SMTP_PASSWORD = get_secret("SMTP_PASSWORD").replace(" ", "")
