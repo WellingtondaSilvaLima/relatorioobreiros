@@ -19,6 +19,13 @@ from io import BytesIO
 
 load_dotenv()
 
+st.set_page_config(
+    page_title="Formulário Pastoral",  # Título que aparece na aba
+    page_icon="assets/logo_igreja.png",  # Caminho para o favicon
+    layout="centered",  # ou "wide" para layout expandido
+    initial_sidebar_state="auto"  # ou "expanded", "collapsed"
+)
+
 def get_secret(key: str, default=""):
     # Prioriza st.secrets no deploy
     if key in st.secrets:
