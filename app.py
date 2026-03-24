@@ -166,7 +166,14 @@ class ReportStorage:
 def parse_allowed_users(raw: str) -> dict:
     """
     Formato no .env:
-    ALLOWED_USERS=joao|123456|João da Silva|obreiro,maria|abc123|Maria Oliveira|pastor
+    ALLOWED_USERS=joao|123456|João da Silva|obreiro,maria|abc123|Maria Oliveira|pastor,ana|123456|Ana Souza|esposa_obreiro,carlos|123456|Carlos Silva|missionario,maria_s|123456|Maria Silva|missionaria
+    
+    Tipos de usuário:
+    - obreiro: pode preencher e enviar formulários
+    - esposa_obreiro: mesma permissão que obreiro
+    - pastor: pode ver todos os relatórios e gerenciar dados
+    - missionario: mesma permissão que pastor
+    - missionaria: mesma permissão que pastor
     """
     users = {}
 
@@ -187,13 +194,40 @@ def parse_allowed_users(raw: str) -> dict:
         full_name = parts[2]
         user_type = parts[3] if len(parts) > 3 else "obreiro"  # Default: obreiro
         
+        # Validar tipo de usuário
+        valid_types = ["obreiro", "esposa_obreiro", "pastor", "missionario", "missionaria"]
+        if user_type not in valid_types:
+            # Se for inválido, define como obreiro por padrão
+            user_type = "obreiro"
+        
         users[username] = {
             "password": password,
             "name": full_name,
-            "type": user_type  # "pastor" ou "obreiro"
+            "type": user_type
         }
 
     return users
+
+def get_user_display_type(user_type: str) -> str:
+    """Retorna o tipo de usuário para exibição na interface"""
+    type_mapping = {
+        "obreiro": "Obreiro",
+        "esposa_obreiro": "Esposa de Obreiro",
+        "pastor": "Pastor",
+        "missionario": "Missionário",
+        "missionaria": "Missionária"
+    }
+    return type_mapping.get(user_type, "Usuário")
+
+def is_worker_type(user_type: str) -> bool:
+    """Verifica se o tipo de usuário é de trabalhador (pode preencher formulário)"""
+    worker_types = ["obreiro", "esposa_obreiro"]
+    return user_type in worker_types
+
+def is_leader_type(user_type: str) -> bool:
+    """Verifica se o tipo de usuário é de líder (pode ver relatórios)"""
+    leader_types = ["pastor", "missionario", "missionaria"]
+    return user_type in leader_types
 
 ALLOWED_USERS = parse_allowed_users(ALLOWED_USERS_RAW)
 
@@ -275,7 +309,7 @@ def build_pdf_bytes(form_data: dict) -> bytes:
     story.append(Paragraph("Formulário Pastoral", title_style))
     
     # Data
-    data_text = f"Gerado em: {datetime.now(ZoneInfo("America/Sao_Paulo")).strftime('%d/%m/%Y %H:%M')}"
+    data_text = f"Gerado em: {datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')}"
     story.append(Paragraph(data_text, styles['Normal']))
     story.append(Spacer(1, 20))
     
@@ -376,7 +410,7 @@ def login_screen():
             st.error("Usuário ou senha inválidos.")
 
 # =========================
-# FORMULÁRIO (OBREIRO)
+# FORMULÁRIO (TRABALHADORES)
 # =========================
 def form_screen():
     col1, col2 = st.columns([1, 4])
@@ -391,11 +425,11 @@ def form_screen():
 
     with st.sidebar:
         st.write(f"**Logado como:** {st.session_state.full_name}")
-        st.write(f"**Tipo:** {'Pastor' if st.session_state.user_type == 'pastor' else 'Obreiro'}")
+        st.write(f"**Tipo:** {get_user_display_type(st.session_state.user_type)}")
         st.button("Sair", on_click=logout)
         
-        # Menu de navegação
-        if st.session_state.user_type == "pastor":
+        # Menu de navegação para líderes
+        if is_leader_type(st.session_state.user_type):
             st.sidebar.subheader("Navegação")
             page = st.radio(
                 "Selecione:",
@@ -404,7 +438,7 @@ def form_screen():
             )
             return page
 
-    if st.session_state.user_type == "obreiro":
+    if is_worker_type(st.session_state.user_type):
         with st.form("pastoral_form", clear_on_submit=False):
             st.text_input("Nome", value=st.session_state.full_name, disabled=True)
             vida_devocional = st.text_area("Como está sua vida devocional?", height=120)
@@ -443,6 +477,7 @@ def form_screen():
                     "id": report_id,
                     "obreiro_name": st.session_state.full_name,
                     "obreiro_username": st.session_state.username,
+                    "user_type": st.session_state.user_type,  # Salvar o tipo de usuário
                     "data_envio": datetime.now(ZoneInfo("America/Sao_Paulo")).isoformat(),
                     "form_data": form_data,
                     "pdf_name": pdf_name
@@ -451,7 +486,7 @@ def form_screen():
                 # Salvar no arquivo JSON
                 storage.save_report(report_id, report_data)
 
-                st.success("Formulário enviado com sucesso para o e-mail do pastor e salvo no sistema!")
+                st.success("Formulário enviado com sucesso e salvo no sistema!")
                 st.download_button(
                     label="Baixar cópia do PDF",
                     data=pdf_bytes,
@@ -465,11 +500,11 @@ def form_screen():
     return None
 
 # =========================
-# GERENCIAMENTO DE DADOS (PASTOR)
+# GERENCIAMENTO DE DADOS (LÍDERES)
 # =========================
 def data_management_view():
     st.title("🗄️ Gerenciamento de Dados")
-    st.caption(f"Pastor: {st.session_state.full_name}")
+    st.caption(f"{get_user_display_type(st.session_state.user_type)}: {st.session_state.full_name}")
     
     # Estatísticas
     stats = storage.get_statistics()
@@ -478,7 +513,7 @@ def data_management_view():
     with col1:
         st.metric("Total de Relatórios", stats["total"])
     with col2:
-        st.metric("Obreiros que Enviaram", stats["unique_obreiros"])
+        st.metric("Pessoas que Enviaram", stats["unique_obreiros"])
     with col3:
         if stats["newest_date"]:
             st.metric("Último Envio", stats["newest_date"].strftime("%d/%m/%Y"))
@@ -488,14 +523,14 @@ def data_management_view():
     # Opções de exclusão
     st.subheader("⚠️ Exclusão de Dados")
     
-    tab1, tab2, tab3 = st.tabs(["Excluir por Obreiro", "Excluir Relatório Específico", "Excluir Todos"])
+    tab1, tab2, tab3 = st.tabs(["Excluir por Pessoa", "Excluir Relatório Específico", "Excluir Todos"])
     
     with tab1:
-        st.write("Excluir todos os relatórios de um obreiro específico")
+        st.write("Excluir todos os relatórios de uma pessoa específica")
         
         if stats["obreiros_list"]:
             selected_obreiro = st.selectbox(
-                "Selecione o obreiro:",
+                "Selecione a pessoa:",
                 stats["obreiros_list"],
                 key="delete_by_obreiro"
             )
@@ -512,9 +547,9 @@ def data_management_view():
                         st.success(f"✅ {count} relatório(s) excluído(s) com sucesso!")
                         st.rerun()
             else:
-                st.info("Este obreiro não possui relatórios")
+                st.info("Esta pessoa não possui relatórios")
         else:
-            st.info("Nenhum obreiro encontrado")
+            st.info("Nenhuma pessoa encontrada")
     
     with tab2:
         st.write("Excluir um relatório específico")
@@ -525,7 +560,8 @@ def data_management_view():
             report_options = {}
             for report in all_reports:
                 data_str = datetime.fromisoformat(report["data_envio"]).strftime("%d/%m/%Y %H:%M")
-                label = f"{report['obreiro_name']} - {data_str}"
+                user_type_display = get_user_display_type(report.get("user_type", "obreiro"))
+                label = f"{report['obreiro_name']} ({user_type_display}) - {data_str}"
                 report_options[label] = report["id"]
             
             selected_report_label = st.selectbox(
@@ -586,7 +622,7 @@ def data_management_view():
                 st.download_button(
                     label="📥 Baixar Backup dos Dados",
                     data=backup_json,
-                    file_name=f"backup_reports_{datetime.now(ZoneInfo("America/Sao_Paulo")).strftime('%Y%m%d_%H%M%S')}.json",
+                    file_name=f"backup_reports_{datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%Y%m%d_%H%M%S')}.json",
                     mime="application/json"
                 )
     
@@ -612,9 +648,9 @@ def data_management_view():
                 st.error("Arquivo inválido. Por favor, selecione um arquivo JSON válido.")
 
 # =========================
-# VISUALIZAÇÃO DE RELATÓRIOS (PASTOR)
+# VISUALIZAÇÃO DE RELATÓRIOS (LÍDERES)
 # =========================
-def pastor_view():
+def leader_view():
     col1, col2 = st.columns([1, 4])
 
     with col1:
@@ -622,13 +658,13 @@ def pastor_view():
             st.image(LOGO_PATH, width=90)
 
     with col2:
-        st.title("Relatórios dos Obreiros")
-        st.caption(f"Pastor: {st.session_state.full_name}")
+        st.title("Relatórios Recebidos")
+        st.caption(f"{get_user_display_type(st.session_state.user_type)}: {st.session_state.full_name}")
 
     # Menu na sidebar
     with st.sidebar:
         st.write(f"**Logado como:** {st.session_state.full_name}")
-        st.write(f"**Tipo:** Pastor")
+        st.write(f"**Tipo:** {get_user_display_type(st.session_state.user_type)}")
         st.button("Sair", on_click=logout)
         
         st.sidebar.subheader("Navegação")
@@ -646,28 +682,47 @@ def pastor_view():
     reports = storage.get_reports_by_pastor(st.session_state.full_name)
     
     if not reports:
-        st.info("Nenhum relatório encontrado. Os obreiros ainda não enviaram formulários.")
+        st.info("Nenhum relatório encontrado. As pessoas ainda não enviaram formulários.")
         return
     
     # Filtros
     col_filter1, col_filter2, col_filter3 = st.columns(3)
     with col_filter1:
-        # Filtrar por obreiro
-        obreiros = list(set([r["obreiro_name"] for r in reports]))
-        selected_obreiro = st.selectbox("Filtrar por Obreiro:", ["Todos"] + obreiros)
+        # Filtrar por pessoa
+        pessoas = list(set([r["obreiro_name"] for r in reports]))
+        selected_pessoa = st.selectbox("Filtrar por Pessoa:", ["Todos"] + pessoas)
     
     with col_filter2:
+        # Filtrar por tipo de usuário
+        user_types = list(set([r.get("user_type", "obreiro") for r in reports]))
+        user_type_names = ["Todos"] + [get_user_display_type(ut) for ut in user_types]
+        selected_type_name = st.selectbox("Filtrar por Tipo:", user_type_names)
+        
+        # Converter o nome exibido de volta para o tipo
+        if selected_type_name != "Todos":
+            # Mapeamento reverso
+            reverse_mapping = {v: k for k, v in {
+                "obreiro": "Obreiro",
+                "esposa_obreiro": "Esposa de Obreiro",
+                "pastor": "Pastor",
+                "missionario": "Missionário",
+                "missionaria": "Missionária"
+            }.items()}
+            selected_type = reverse_mapping.get(selected_type_name)
+        else:
+            selected_type = None
+    
+    with col_filter3:
         # Ordenar por data
         sort_order = st.selectbox("Ordenar por data:", ["Mais recentes primeiro", "Mais antigos primeiro"])
     
-    with col_filter3:
-        # Opção de seleção múltipla para exclusão em lote
-        multi_delete = st.checkbox("Modo de exclusão múltipla")
-    
     # Aplicar filtros
     filtered_reports = reports
-    if selected_obreiro != "Todos":
-        filtered_reports = [r for r in reports if r["obreiro_name"] == selected_obreiro]
+    if selected_pessoa != "Todos":
+        filtered_reports = [r for r in reports if r["obreiro_name"] == selected_pessoa]
+    
+    if selected_type:
+        filtered_reports = [r for r in filtered_reports if r.get("user_type", "obreiro") == selected_type]
     
     # Ordenar
     reverse = sort_order == "Mais recentes primeiro"
@@ -675,12 +730,15 @@ def pastor_view():
     
     # Exibir estatísticas
     st.subheader("📊 Estatísticas")
-    col_stats1, col_stats2, col_stats3 = st.columns(3)
+    col_stats1, col_stats2, col_stats3, col_stats4 = st.columns(4)
     with col_stats1:
         st.metric("Total de Relatórios", len(filtered_reports))
     with col_stats2:
-        st.metric("Obreiros que Enviaram", len(set([r["obreiro_name"] for r in filtered_reports])))
+        st.metric("Pessoas que Enviaram", len(set([r["obreiro_name"] for r in filtered_reports])))
     with col_stats3:
+        tipos_unicos = len(set([r.get("user_type", "obreiro") for r in filtered_reports]))
+        st.metric("Tipos de Usuários", tipos_unicos)
+    with col_stats4:
         st.metric("Último Envio", 
                   datetime.fromisoformat(filtered_reports[0]["data_envio"]).strftime("%d/%m/%Y %H:%M") 
                   if filtered_reports else "Nenhum")
@@ -707,12 +765,14 @@ def pastor_view():
                     selected_reports.append(report["id"])
             
             with col_expander:
-                with st.expander(f"📄 {report['obreiro_name']} - {datetime.fromisoformat(report['data_envio']).strftime('%d/%m/%Y %H:%M')}"):
+                user_type_display = get_user_display_type(report.get("user_type", "obreiro"))
+                with st.expander(f"📄 {report['obreiro_name']} ({user_type_display}) - {datetime.fromisoformat(report['data_envio']).strftime('%d/%m/%Y %H:%M')}"):
                     # Exibir dados do formulário
                     form_data = report["form_data"]
                     
                     st.markdown("**Dados do Relatório:**")
                     st.write(f"**Nome:** {form_data['nome']}")
+                    st.write(f"**Tipo:** {user_type_display}")
                     st.write(f"**Vida Devocional:** {form_data['vida_devocional'] or 'Não informado'}")
                     st.write(f"**Cônjuge:** {form_data['conjuge'] or 'Não informado'}")
                     st.write(f"**Filhos:** {form_data['filhos'] or 'Não informado'}")
@@ -751,7 +811,8 @@ def pastor_view():
     else:
         # Modo normal - exibir relatórios
         for report in filtered_reports:
-            with st.expander(f"📄 {report['obreiro_name']} - {datetime.fromisoformat(report['data_envio']).strftime('%d/%m/%Y %H:%M')}"):
+            user_type_display = get_user_display_type(report.get("user_type", "obreiro"))
+            with st.expander(f"📄 {report['obreiro_name']} ({user_type_display}) - {datetime.fromisoformat(report['data_envio']).strftime('%d/%m/%Y %H:%M')}"):
                 # Exibir dados do formulário
                 form_data = report["form_data"]
                 
@@ -767,6 +828,7 @@ def pastor_view():
                     st.markdown("**Dados do Relatório:**")
                 
                 st.write(f"**Nome:** {form_data['nome']}")
+                st.write(f"**Tipo:** {user_type_display}")
                 st.write(f"**Vida Devocional:** {form_data['vida_devocional'] or 'Não informado'}")
                 st.write(f"**Cônjuge:** {form_data['conjuge'] or 'Não informado'}")
                 st.write(f"**Filhos:** {form_data['filhos'] or 'Não informado'}")
@@ -818,10 +880,13 @@ def main():
 
     if st.session_state.authenticated:
         # Verificar tipo de usuário
-        if st.session_state.user_type == "pastor":
-            pastor_view()
-        else:  # obreiro
+        if is_leader_type(st.session_state.user_type):
+            leader_view()
+        elif is_worker_type(st.session_state.user_type):
             form_screen()
+        else:
+            st.error("Tipo de usuário inválido.")
+            logout()
     else:
         login_screen()
 
