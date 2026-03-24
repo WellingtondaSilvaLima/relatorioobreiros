@@ -25,11 +25,6 @@ def get_secret(key: str, default=""):
     return os.getenv(key, default).strip()
 
 LOGO_PATH = "assets/logo_igreja.png"
-PASTOR_EMAIL = get_secret("PASTOR_EMAIL")
-SMTP_EMAIL = get_secret("SMTP_EMAIL")
-SMTP_PASSWORD = get_secret("SMTP_PASSWORD").replace(" ", "")
-SMTP_SERVER = get_secret("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(get_secret("SMTP_PORT", "587"))
 ALLOWED_USERS_RAW = get_secret("ALLOWED_USERS")
 
 # Arquivo para armazenar os relatórios
@@ -245,37 +240,6 @@ def build_pdf_bytes(form_data: dict) -> bytes:
     
     return pdf_bytes
 
-def send_email_with_pdf(pdf_bytes: bytes, recipient_email: str, file_name: str, logged_user_name: str):
-    if not SMTP_EMAIL:
-        raise ValueError("SMTP_EMAIL não configurado.")
-    if not SMTP_PASSWORD:
-        raise ValueError("SMTP_PASSWORD não configurado.")
-    if not recipient_email:
-        raise ValueError("PASTOR_EMAIL não configurado.")
-
-    msg = EmailMessage()
-    msg["Subject"] = f"Formulário Pastoral - {logged_user_name}"
-    msg["From"] = SMTP_EMAIL
-    msg["To"] = recipient_email
-    msg.set_content(
-        f"Olá,\n\nSegue em anexo o formulário pastoral preenchido por {logged_user_name}.\n\n"
-        f"Enviado automaticamente pelo sistema."
-    )
-
-    msg.add_attachment(
-        pdf_bytes,
-        maintype="application",
-        subtype="pdf",
-        filename=file_name
-    )
-
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(SMTP_EMAIL, SMTP_PASSWORD)
-        server.send_message(msg)
-
 # =========================
 # CONTROLE DE SESSÃO
 # =========================
@@ -405,14 +369,6 @@ def form_screen():
                 
                 # Salvar no arquivo JSON
                 storage.save_report(report_id, report_data)
-                
-                # Enviar e-mail
-                send_email_with_pdf(
-                    pdf_bytes=pdf_bytes,
-                    recipient_email=PASTOR_EMAIL,
-                    file_name=pdf_name,
-                    logged_user_name=st.session_state.full_name
-                )
 
                 st.success("Formulário enviado com sucesso para o e-mail do pastor e salvo no sistema!")
                 st.download_button(
