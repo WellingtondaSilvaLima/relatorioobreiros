@@ -373,7 +373,6 @@ def logout():
     st.session_state.user_type = ""
     st.session_state.show_delete_modal = False
     st.session_state.report_to_delete = None
-    st.rerun()
 
 init_session()
 
@@ -426,7 +425,10 @@ def form_screen():
     with st.sidebar:
         st.write(f"**Logado como:** {st.session_state.full_name}")
         st.write(f"**Tipo:** {get_user_display_type(st.session_state.user_type)}")
-        st.button("Sair", on_click=logout)
+        if st.button("Sair"):
+            st.session_state.just_logged_out = True
+            logout()
+            st.rerun()
         
         # Menu de navegação para líderes
         if is_leader_type(st.session_state.user_type):
@@ -665,7 +667,10 @@ def leader_view():
     with st.sidebar:
         st.write(f"**Logado como:** {st.session_state.full_name}")
         st.write(f"**Tipo:** {get_user_display_type(st.session_state.user_type)}")
-        st.button("Sair", on_click=logout)
+        if st.button("Sair"):
+            st.session_state.just_logged_out = True
+            logout()
+            st.rerun()
         
         st.sidebar.subheader("Navegação")
         page = st.radio(
@@ -878,6 +883,12 @@ def leader_view():
 # APP
 # =========================
 def main():
+    # Verifica se o usuário acabou de fazer logout
+    if not st.session_state.authenticated and st.session_state.get("just_logged_out", False):
+        st.session_state.just_logged_out = False
+        st.rerun()
+        return
+    
     if not ALLOWED_USERS:
         st.error("Nenhum usuário autorizado foi configurado no .env.")
         st.stop()
