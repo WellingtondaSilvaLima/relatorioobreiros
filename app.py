@@ -686,7 +686,7 @@ def leader_view():
         return
     
     # Filtros
-    col_filter1, col_filter2, col_filter3 = st.columns(3)
+    col_filter1, col_filter2, col_filter3, col_filter4 = st.columns(4)
     with col_filter1:
         # Filtrar por pessoa
         pessoas = list(set([r["obreiro_name"] for r in reports]))
@@ -715,6 +715,10 @@ def leader_view():
     with col_filter3:
         # Ordenar por data
         sort_order = st.selectbox("Ordenar por data:", ["Mais recentes primeiro", "Mais antigos primeiro"])
+    
+    with col_filter4:
+        # Opção de seleção múltipla para exclusão em lote
+        multi_delete = st.checkbox("Modo de exclusão múltipla")
     
     # Aplicar filtros
     filtered_reports = reports
